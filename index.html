@@ -56,7 +56,7 @@
 
 <script>
 // VUL HIER JOUW JSONBIN ID IN (Tussen de aanhalingstekens)
-const JSONBIN_ID = "6a175381ddf5aa59f76d64e8"; 
+const JSONBIN_ID = "JOUW_BIN_ID_HIER"; 
 
 const map = L.map('map').setView([51.87, 5.38], 12);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -70,33 +70,27 @@ const statusClass  = { gepland: 'status-gepland', bezig: 'status-bezig', klaar: 
 function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
 function tekeningLint(gesorteerd) {
-  if (lintLaag) { map.removeLayer(lintLaag); }
   if (gesorteerd.length < 2) return;
+  const turfCoords = gesorteerd.map(p => [p.lng, p.lat]);
+  const linestring = turf.lineString(turfCoords);
+  const curved = turf.bezierSpline(linestring, { resolution: 10000, sharpness: 0.85 });
+  const curveCoords = curved.geometry.coordinates.map(c => [c[1], c[0]]);
 
-  // 1. Maak een lijn van de punten
-  const points = gesorteerd.map(p => [p.lng, p.lat]);
-  const line = turf.lineString(points);
-
-  // 2. We maken het lint 'zacht' door de lijn te versimpelen 
-  // en er een 'buffer' (dikke strook) van te maken
-  // Een buffer zorgt voor dat brede, doorzichtige effect.
-  const buffered = turf.buffer(line, 0.05, { units: 'kilometers' });
-
-  // 3. Teken het als een polygon (vlak) op de kaart
-  lintLaag = L.geoJSON(buffered, {
-    style: {
-      color: '#5a8c2a',
-      fillColor: '#5a8c2a',
-      weight: 0,           // Geen harde randlijn
-      fillOpacity: 0.25,   // Lekker doorzichtig
-      interactive: false   // Je kunt er doorheen klikken
-    }
+  const lijn = L.polyline([], {
+    color: '#5a8c2a', weight: 5, opacity: 0.7, lineCap: 'round', lineJoin: 'round'
   }).addTo(map);
-  
-  // Breng het lint naar de achtergrond (onder de markers)
-  lintLaag.bringToBack();
+
+  let i = 0;
+  function animatieLoop() {
+    if (i < curveCoords.length) {
+      lijn.addLatLng(curveCoords[i]);
+      i += 4; 
+      requestAnimationFrame(animatieLoop);
+    }
+  }
+  setTimeout(animatieLoop, 400);
 }
- 
+
 async function laadPercelen() {
   let percelen = [];
   try {
