@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Voedsellint — Gonzend Rivierenland</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: #f5f0e8; color: #2a2a1e; min-height: 100vh; }
+  header { background: #2d5016; color: #f0e8d0; padding: 12px 20px; display: flex; align-items: center; gap: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.3); }
+  header .logo { width: 36px; height: 36px; background: #5a8c2a; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; }
+  header h1 { font-size: 18px; font-weight: 600; }
+  header p { font-size: 12px; color: #a8c87a; margin-top: 1px; }
+  .counter { background: #5a8c2a; color: #fff; border-radius: 10px; padding: 1px 7px; font-size: 11px; font-weight: 700; margin-left: 6px; }
+  #map { height: calc(100vh - 57px); width: 100%; }
+  .leaflet-popup-content-wrapper { border-radius: 12px; box-shadow: 0 4px 24px rgba(0,0,0,0.18); border: none; overflow: hidden; padding: 0; min-width: 260px; max-width: 320px; }
+  .leaflet-popup-content { margin: 0; width: 100% !important; }
+  .leaflet-popup-tip-container { display: none; }
+  .popup-img { width: 100%; height: 160px; object-fit: cover; display: block; }
+  .popup-img-placeholder { width: 100%; height: 120px; background: linear-gradient(135deg, #c8e6a0, #7ab048); display: flex; align-items: center; justify-content: center; font-size: 40px; }
+  .popup-body { padding: 14px 16px; background: #fff; }
+  .popup-title { font-size: 15px; font-weight: 700; color: #1e3a08; margin-bottom: 4px; }
+  .popup-status { display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px; margin-bottom: 8px; }
+  .status-gepland { background: #fff3cd; color: #856404; }
+  .status-bezig   { background: #cfe2ff; color: #084298; }
+  .status-klaar   { background: #d1e7dd; color: #0a3622; }
+  .popup-desc { font-size: 13px; color: #444; line-height: 1.5; margin-bottom: 6px; }
+  .legend { position: absolute; bottom: 28px; left: 12px; z-index: 1000; background: rgba(255,255,255,0.93); border-radius: 10px; padding: 10px 14px; box-shadow: 0 2px 10px rgba(0,0,0,0.15); font-size: 12px; color: #333; }
+  .legend-title { font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #555; margin-bottom: 6px; }
+  .legend-item { display: flex; align-items: center; gap: 7px; margin-bottom: 4px; }
+  .legend-dot { width: 12px; height: 12px; border-radius: 50%; border: 2px solid rgba(0,0,0,0.15); }
+  .geen-percelen { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1000; background: rgba(255,255,255,0.95); border-radius: 12px; padding: 20px 28px; text-align: center; box-shadow: 0 2px 16px rgba(0,0,0,0.12); font-size: 14px; color: #555; display: none; }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">🌿</div>
+  <div>
+    <h1>Voedsellint <span id="headerCount" class="counter">0</span></h1>
+    <p>Gonzend Rivierenland — percelenkaart</p>
+  </div>
+</header>
+
+<div id="map"></div>
+
+<div class="legend">
+  <div class="legend-title">Status</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#f0ad4e"></div> Gepland</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#4e9af0"></div> Bezig</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#4ea854"></div> Klaar</div>
+</div>
+
+<div class="geen-percelen" id="geenPercelen">
+  🌱 Er zijn nog geen percelen toegevoegd.
+</div>
+
+<script>
+const map = L.map('map').setView([51.87, 5.38], 12);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '© <a href="https://openstreetmap.org">OpenStreetMap</a>', maxZoom: 19
+}).addTo(map);
+
+const statusKleur = { gepland: '#f0ad4e', bezig: '#4e9af0', klaar: '#4ea854' };
+const statusLabel  = { gepland: 'Gepland', bezig: 'Bezig', klaar: 'Klaar' };
+const statusClass  = { gepland: 'status-gepland', bezig: 'status-bezig', klaar: 'status-klaar' };
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function tekeningLint(gesorteerd) {
+  if (gesorteerd.length < 2) return;
+  const coords = gesorteerd.map(p => [p.lat, p.lng]);
+
+  // Teken de volledige lijn onzichtbaar als referentie
+  const volledigeLijn = L.polyline(coords, { color: '#3a7d1e', weight: 3, opacity: 0 }).addTo(map);
+
+  // Animeer punt voor punt
+  let huidig = 0;
+  const animatieLijn = L.polyline([coords[0]], {
+    color: '#3a7d1e',
+    weight: 2.5,
+    opacity: 0.55,
+    dashArray: null,
+    lineCap: 'round',
+    lineJoin: 'round'
+  }).addTo(animatieLijn => animatieLijn);
+
+  // Bouw de lijn op segment voor segment
+  const animatiePad = L.polyline([coords[0]], {
+    color: '#3a7d1e',
+    weight: 2.5,
+    opacity: 0.55,
+    lineCap: 'round',
+    lineJoin: 'round'
+  }).addTo(map);
+
+  volledigeLijn.remove();
+
+  const STAPPEN = 40;
+  const VERTRAGING = 18;
+
+  function interpoleer(a, b, t) {
+    return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+  }
+
+  function tekenSegment(van, naar, stap) {
+    if (stap > STAPPEN) {
+      animatiePad.addLatLng(naar);
+      huidig++;
+      if (huidig < coords.length - 1) {
+        setTimeout(() => tekenSegment(coords[huidig], coords[huidig + 1], 0), VERTRAGING);
+      }
+      return;
+    }
+    const t = stap / STAPPEN;
+    const tussenPunt = interpoleer(van, naar, t);
+    const huidigePunten = animatiePad.getLatLngs();
+    huidigePunten[huidigePunten.length - 1] = tussenPunt;
+    animatiePad.setLatLngs(huidigePunten);
+    setTimeout(() => tekenSegment(van, naar, stap + 1), VERTRAGING);
+  }
+
+  setTimeout(() => tekenSegment(coords[0], coords[1], 0), 600);
+}
+
+function laadPercelen() {
+  const percelen = JSON.parse(localStorage.getItem('voedsellint_percelen') || '[]');
+  document.getElementById('headerCount').textContent = percelen.length;
+  document.getElementById('geenPercelen').style.display = percelen.length === 0 ? 'block' : 'none';
+
+  // Sorteer van noord (hoge lat) naar zuid (lage lat)
+  const gesorteerd = [...percelen].sort((a, b) => b.lat - a.lat);
+
+  gesorteerd.forEach(p => {
+    const kleur = statusKleur[p.status] || '#888';
+    const icon = L.divIcon({
+      className: '',
+      html: `<div style="width:34px;height:34px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:${kleur};border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;"><span style="transform:rotate(45deg);font-size:15px;line-height:1;">🌿</span></div>`,
+      iconSize: [34, 34], iconAnchor: [17, 34], popupAnchor: [0, -36]
+    });
+
+    const fotoHtml = p.foto
+      ? `<img src="${p.foto}" class="popup-img" alt="Foto" onerror="this.style.display='none'"/>`
+      : `<div class="popup-img-placeholder">🌿</div>`;
+
+    L.marker([p.lat, p.lng], { icon }).addTo(map).bindPopup(`
+      <div>
+        ${fotoHtml}
+        <div class="popup-body">
+          <div class="popup-title">${escHtml(p.naam)}</div>
+          <span class="popup-status ${statusClass[p.status]}">${statusLabel[p.status]}</span>
+          <div class="popup-desc">${escHtml(p.beschrijving || '—')}</div>
+          ${p.adres ? `<div style="font-size:11px;color:#888;">📍 ${escHtml(p.adres)}</div>` : ''}
+        </div>
+      </div>
+    `, { maxWidth: 320 });
+  });
+
+  tekeningLint(gesorteerd);
+}
+
+laadPercelen();
+</script>
+</body>
+</html>
