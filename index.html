@@ -73,7 +73,7 @@ function tekeningLint(gesorteerd) {
   if (gesorteerd.length < 2) return;
   const turfCoords = gesorteerd.map(p => [p.lng, p.lat]);
   const linestring = turf.lineString(turfCoords);
-  const curved = turf.bezierSpline(linestring, { resolution: 10000, sharpness: 0.85 });
+  const curved = turf.bezierSpline(linestring, { resolution: 10000, sharpness: 0.35 });
   const curveCoords = curved.geometry.coordinates.map(c => [c[1], c[0]]);
 
   const lijn = L.polyline([], {
