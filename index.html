@@ -15,9 +15,7 @@
   header h1 { font-size: 18px; font-weight: 600; }
   header p { font-size: 12px; color: #a8c87a; margin-top: 1px; }
   .counter { background: #5a8c2a; color: #fff; border-radius: 10px; padding: 1px 7px; font-size: 11px; font-weight: 700; margin-left: 6px; }
-  
   #map { height: calc(100vh - 57px); width: 100%; position: relative; z-index: 1; }
-  
   .leaflet-popup-content-wrapper { border-radius: 12px; box-shadow: 0 4px 24px rgba(0,0,0,0.18); border: none; overflow: hidden; padding: 0; min-width: 260px; max-width: 320px; }
   .leaflet-popup-content { margin: 0; width: 100% !important; }
   .leaflet-popup-tip-container { display: none; }
@@ -30,12 +28,10 @@
   .status-bezig   { background: #cfe2ff; color: #084298; }
   .status-klaar   { background: #d1e7dd; color: #0a3622; }
   .popup-desc { font-size: 13px; color: #444; line-height: 1.5; margin-bottom: 6px; }
-  
   .legend { position: absolute; bottom: 28px; left: 12px; z-index: 1000; background: rgba(255,255,255,0.93); border-radius: 10px; padding: 10px 14px; box-shadow: 0 2px 10px rgba(0,0,0,0.15); font-size: 12px; color: #333; }
   .legend-title { font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #555; margin-bottom: 6px; }
   .legend-item { display: flex; align-items: center; gap: 7px; margin-bottom: 4px; }
   .legend-dot { width: 12px; height: 12px; border-radius: 50%; border: 2px solid rgba(0,0,0,0.15); }
-  
   .geen-percelen { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1000; background: rgba(255,255,255,0.95); border-radius: 12px; padding: 20px 28px; text-align: center; box-shadow: 0 2px 16px rgba(0,0,0,0.12); font-size: 14px; color: #555; display: none; }
 </style>
 </head>
@@ -47,21 +43,21 @@
     <p>Gonzend Rivierenland — percelenkaart</p>
   </div>
 </header>
-
 <div id="map"></div>
-
 <div class="legend">
   <div class="legend-title">Status</div>
   <div class="legend-item"><div class="legend-dot" style="background:#f0ad4e"></div> Gepland</div>
   <div class="legend-item"><div class="legend-dot" style="background:#4e9af0"></div> Bezig</div>
   <div class="legend-item"><div class="legend-dot" style="background:#4ea854"></div> Klaar</div>
 </div>
-
 <div class="geen-percelen" id="geenPercelen">
-  🌱 Er zijn nog geen percelen toegevoegd of geladen.
+  ⏳ Percelen worden geladen...
 </div>
 
 <script>
+// VUL HIER JOUW JSONBIN ID IN (Tussen de aanhalingstekens)
+const JSONBIN_ID = "6a175381ddf5aa59f76d64e8"; 
+
 const map = L.map('map').setView([51.87, 5.38], 12);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   attribution: '© <a href="https://openstreetmap.org">OpenStreetMap</a>', maxZoom: 19
@@ -71,21 +67,13 @@ const statusKleur = { gepland: '#f0ad4e', bezig: '#4e9af0', klaar: '#4ea854' };
 const statusLabel  = { gepland: 'Gepland', bezig: 'Bezig', klaar: 'Klaar' };
 const statusClass  = { gepland: 'status-gepland', bezig: 'status-bezig', klaar: 'status-klaar' };
 
-function escHtml(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
+function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
 function tekeningLint(gesorteerd) {
   if (gesorteerd.length < 2) return;
-  
-  // 1. Zet coördinaten om voor Turf.js [Lng, Lat]
   const turfCoords = gesorteerd.map(p => [p.lng, p.lat]);
   const linestring = turf.lineString(turfCoords);
-
-  // 2. Bereken de vloeiende curve
   const curved = turf.bezierSpline(linestring, { resolution: 10000, sharpness: 0.85 });
-
-  // 3. Zet terug naar Leaflet formaat [Lat, Lng]
   const curveCoords = curved.geometry.coordinates.map(c => [c[1], c[0]]);
 
   const lijn = L.polyline([], {
@@ -96,7 +84,7 @@ function tekeningLint(gesorteerd) {
   function animatieLoop() {
     if (i < curveCoords.length) {
       lijn.addLatLng(curveCoords[i]);
-      i += 4; // Bepaalt de snelheid van de animatie
+      i += 4; 
       requestAnimationFrame(animatieLoop);
     }
   }
@@ -106,21 +94,26 @@ function tekeningLint(gesorteerd) {
 async function laadPercelen() {
   let percelen = [];
   try {
-    // Cache buster toegevoegd zodat we altijd de laatste data van GitHub krijgen
-    const res = await fetch('percelen.json?t=' + new Date().getTime());
+    const res = await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_ID}/latest`);
     if (res.ok) {
-      percelen = await res.json();
+      const data = await res.json();
+      percelen = data.record; // JSONBin stopt de data in de 'record' sleutel
     }
   } catch (e) {
-    console.error("Fout bij laden van percelen.json", e);
+    console.error("Fout bij laden", e);
   }
 
   document.getElementById('headerCount').textContent = percelen.length;
-  document.getElementById('geenPercelen').style.display = percelen.length === 0 ? 'block' : 'none';
+  const geenPercelenDiv = document.getElementById('geenPercelen');
+  
+  if (percelen.length === 0) {
+    geenPercelenDiv.textContent = "🌱 Er zijn nog geen percelen toegevoegd.";
+    geenPercelenDiv.style.display = 'block';
+  } else {
+    geenPercelenDiv.style.display = 'none';
+  }
 
-  // Sorteren (bijvoorbeeld van noord naar zuid, kan later aangepast worden)
   const gesorteerd = [...percelen].sort((a, b) => b.lat - a.lat);
-
   gesorteerd.forEach(p => {
     const kleur = statusKleur[p.status] || '#888';
     const icon = L.divIcon({
@@ -128,27 +121,14 @@ async function laadPercelen() {
       html: `<div style="width:34px;height:34px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:${kleur};border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;"><span style="transform:rotate(45deg);font-size:15px;line-height:1;">🌿</span></div>`,
       iconSize: [34, 34], iconAnchor: [17, 34], popupAnchor: [0, -36]
     });
-    
-    const fotoHtml = p.foto
-      ? `<img src="${p.foto}" class="popup-img" alt="Foto" onerror="this.style.display='none'"/>`
-      : `<div class="popup-img-placeholder">🌿</div>`;
-      
+    const fotoHtml = p.foto ? `<img src="${p.foto}" class="popup-img" alt="Foto" onerror="this.style.display='none'"/>` : `<div class="popup-img-placeholder">🌿</div>`;
     L.marker([p.lat, p.lng], { icon }).addTo(map).bindPopup(`
-      <div>
-        ${fotoHtml}
-        <div class="popup-body">
-          <div class="popup-title">${escHtml(p.naam)}</div>
-          <span class="popup-status ${statusClass[p.status]}">${statusLabel[p.status]}</span>
-          <div class="popup-desc">${escHtml(p.beschrijving || '—')}</div>
-          ${p.adres ? `<div style="font-size:11px;color:#888;">📍 ${escHtml(p.adres)}</div>` : ''}
-        </div>
-      </div>
+      <div>${fotoHtml}<div class="popup-body"><div class="popup-title">${escHtml(p.naam)}</div><span class="popup-status ${statusClass[p.status]}">${statusLabel[p.status]}</span><div class="popup-desc">${escHtml(p.beschrijving || '—')}</div>${p.adres ? `<div style="font-size:11px;color:#888;">📍 ${escHtml(p.adres)}</div>` : ''}</div></div>
     `, { maxWidth: 320 });
   });
 
   tekeningLint(gesorteerd);
 }
-
 laadPercelen();
 </script>
 </body>
