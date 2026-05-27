@@ -237,14 +237,31 @@ function maakMarker(p) {
 function tekeningLint(gesorteerd) {
   if (lintLaag) { map.removeLayer(lintLaag); }
   if (gesorteerd.length < 2) return;
-  const turfCoords = gesorteerd.map(p => [p.lng, p.lat]);
-  const curveCoords = turf.bezierSpline(turf.lineString(turfCoords), { resolution: 10000, sharpness: 0.35 }).geometry.coordinates.map(c => [c[1], c[0]]);
-  lintLaag = L.polyline([], { color: '#5a8c2a', weight: 5, opacity: 0.7, lineCap: 'round', lineJoin: 'round' }).addTo(map);
-  let i = 0;
-  function animatieLoop() { if (i < curveCoords.length) { lintLaag.addLatLng(curveCoords[i]); i += 4; requestAnimationFrame(animatieLoop); } }
-  setTimeout(animatieLoop, 400);
-}
 
+  // 1. Maak een lijn van de punten
+  const points = gesorteerd.map(p => [p.lng, p.lat]);
+  const line = turf.lineString(points);
+
+  // 2. We maken het lint 'zacht' door de lijn te versimpelen 
+  // en er een 'buffer' (dikke strook) van te maken
+  // Een buffer zorgt voor dat brede, doorzichtige effect.
+  const buffered = turf.buffer(line, 0.05, { units: 'kilometers' });
+
+  // 3. Teken het als een polygon (vlak) op de kaart
+  lintLaag = L.geoJSON(buffered, {
+    style: {
+      color: '#5a8c2a',
+      fillColor: '#5a8c2a',
+      weight: 0,           // Geen harde randlijn
+      fillOpacity: 0.25,   // Lekker doorzichtig
+      interactive: false   // Je kunt er doorheen klikken
+    }
+  }).addTo(map);
+  
+  // Breng het lint naar de achtergrond (onder de markers)
+  lintLaag.bringToBack();
+}
+ 
 function renderAlles() {
   Object.values(markers).forEach(m => map.removeLayer(m));
   markers = {};
