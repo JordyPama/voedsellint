@@ -31,7 +31,7 @@
   .legend-title { font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #555; margin-bottom: 6px; }
   .legend-item { display: flex; align-items: center; gap: 7px; margin-bottom: 4px; }
   .legend-dot { width: 12px; height: 12px; border-radius: 50%; border: 2px solid rgba(0,0,0,0.15); }
-  .geen-percelen { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1000; background: rgba(255,255,255,0.95); border-radius: 12px; padding: 20px 28px; text-align: center; box-shadow: 0 2px 16px rgba(0,0,0,0.12); font-size: 14px; color: #555; display: none; }
+  .status-melding { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1000; background: rgba(255,255,255,0.95); border-radius: 12px; padding: 20px 28px; text-align: center; box-shadow: 0 2px 16px rgba(0,0,0,0.12); font-size: 14px; color: #555; }
 </style>
 </head>
 <body>
@@ -52,12 +52,12 @@
   <div class="legend-item"><div class="legend-dot" style="background:#4ea854"></div> Klaar</div>
 </div>
 
-<div class="geen-percelen" id="geenPercelen">
-  🌱 Er zijn nog geen percelen toegevoegd.
+<div class="status-melding" id="statusMelding">
+  ⏳ Kaart en percelen worden geladen...
 </div>
 
 <script>
-const map = L.map('map').setView([51.87, 5.38], 12);
+const map = L.map('map').setView([51.87, 5.38], 11);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   attribution: '© <a href="https://openstreetmap.org">OpenStreetMap</a>', maxZoom: 19
 }).addTo(map);
@@ -70,25 +70,17 @@ function escHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-const DEMO = [
-  { id: 'd1', naam: 'Startpunt Noord', lat: 51.920, lng: 5.360, status: 'klaar',    beschrijving: 'Demo — voeg echte percelen toe via de beheerkaart.', adres: '', foto: '' },
-  { id: 'd2', naam: 'Tussenstation',   lat: 51.895, lng: 5.375, status: 'bezig',   beschrijving: 'Demo — voeg echte percelen toe via de beheerkaart.', adres: '', foto: '' },
-  { id: 'd3', naam: 'Midden',          lat: 51.870, lng: 5.390, status: 'bezig',   beschrijving: 'Demo — voeg echte percelen toe via de beheerkaart.', adres: '', foto: '' },
-  { id: 'd4', naam: 'Zuidelijk veld',  lat: 51.845, lng: 5.380, status: 'gepland', beschrijving: 'Demo — voeg echte percelen toe via de beheerkaart.', adres: '', foto: '' },
-  { id: 'd5', naam: 'Eindpunt Zuid',   lat: 51.820, lng: 5.395, status: 'gepland', beschrijving: 'Demo — voeg echte percelen toe via de beheerkaart.', adres: '', foto: '' },
-];
-
 function tekeningLint(gesorteerd) {
   if (gesorteerd.length < 2) return;
   const coords = gesorteerd.map(p => [p.lat, p.lng]);
   let huidig = 0;
 
   const lijn = L.polyline([coords[0]], {
-    color: '#3a7d1e', weight: 2.5, opacity: 0.55, lineCap: 'round', lineJoin: 'round'
+    color: '#3a7d1e', weight: 3, opacity: 0.65, lineCap: 'round', lineJoin: 'round'
   }).addTo(map);
 
-  const STAPPEN = 40;
-  const VERTRAGING = 18;
+  const STAPPEN = 30;
+  const VERTRAGING = 15;
 
   function interpoleer(a, b, t) {
     return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
@@ -109,43 +101,68 @@ function tekeningLint(gesorteerd) {
     setTimeout(() => tekenSegment(van, naar, stap + 1), VERTRAGING);
   }
 
-  setTimeout(() => tekenSegment(coords[0], coords[1], 0), 600);
+  setTimeout(() => tekenSegment(coords[0], coords[1], 0), 400);
 }
 
-function laadPercelen() {
-  let percelen = JSON.parse(localStorage.getItem('voedsellint_percelen') || '[]');
-  const gebruiktDemo = percelen.length === 0;
-  if (gebruiktDemo) percelen = DEMO;
+async function laadPercelen() {
+  const meldingEl = document.getElementById('statusMelding');
+  try {
+    // We fetches het JSON bestand dat je uploadt via het beheerpaneel
+    const response = await fetch('percelen.json');
+    if (!response.ok) throw new Error('Kon percelen.json niet vinden');
+    
+    const percelen = await response.json();
+    
+    if (percelen.length === 0) {
+      meldingEl.textContent = '🌱 Er zijn momenteel geen actieve percelen op de kaart.';
+      return;
+    }
+    
+    meldingEl.style.display = 'none';
+    document.getElementById('headerCount').textContent = percelen.length;
 
-  document.getElementById('headerCount').textContent = gebruiktDemo ? 0 : percelen.length;
-  document.getElementById('geenPercelen').style.display = gebruiktDemo ? 'block' : 'none';
+    // Sorteren van Noord naar Zuid voor de logische lijn-animatie
+    const gesorteerd = [...percelen].sort((a, b) => b.lat - a.lat);
+    const markerBounds = [];
 
-  const gesorteerd = [...percelen].sort((a, b) => b.lat - a.lat);
-
-  gesorteerd.forEach(p => {
-    const kleur = statusKleur[p.status] || '#888';
-    const icon = L.divIcon({
-      className: '',
-      html: `<div style="width:34px;height:34px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:${kleur};border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;"><span style="transform:rotate(45deg);font-size:15px;line-height:1;">🌿</span></div>`,
-      iconSize: [34, 34], iconAnchor: [17, 34], popupAnchor: [0, -36]
-    });
-    const fotoHtml = p.foto
-      ? `<img src="${p.foto}" class="popup-img" alt="Foto" onerror="this.style.display='none'"/>`
-      : `<div class="popup-img-placeholder">🌿</div>`;
-    L.marker([p.lat, p.lng], { icon }).addTo(map).bindPopup(`
-      <div>
-        ${fotoHtml}
-        <div class="popup-body">
-          <div class="popup-title">${escHtml(p.naam)}</div>
-          <span class="popup-status ${statusClass[p.status]}">${statusLabel[p.status]}</span>
-          <div class="popup-desc">${escHtml(p.beschrijving || '—')}</div>
-          ${p.adres ? `<div style="font-size:11px;color:#888;">📍 ${escHtml(p.adres)}</div>` : ''}
+    gesorteerd.forEach(p => {
+      const kleur = statusKleur[p.status] || '#888';
+      const icon = L.divIcon({
+        className: '',
+        html: `<div style="width:34px;height:34px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:${kleur};border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;"><span style="transform:rotate(45deg);font-size:15px;line-height:1;">🌿</span></div>`,
+        iconSize: [34, 34], iconAnchor: [17, 34], popupAnchor: [0, -36]
+      });
+      
+      const fotoHtml = p.foto
+        ? `<img src="${p.foto}" class="popup-img" alt="Foto" onerror="this.style.display='none'"/>`
+        : `<div class="popup-img-placeholder">🌿</div>`;
+        
+      L.marker([p.lat, p.lng], { icon }).addTo(map).bindPopup(`
+        <div>
+          ${fotoHtml}
+          <div class="popup-body">
+            <div class="popup-title">${escHtml(p.naam)}</div>
+            <span class="popup-status ${statusClass[p.status]}">${statusLabel[p.status]}</span>
+            <div class="popup-desc">${escHtml(p.beschrijving || '—')}</div>
+            ${p.adres ? `<div style="font-size:11px;color:#888;">📍 ${escHtml(p.adres)}</div>` : ''}
+          </div>
         </div>
-      </div>
-    `, { maxWidth: 320 });
-  });
+      `, { maxWidth: 320 });
+      
+      markerBounds.push([p.lat, p.lng]);
+    });
 
-  tekeningLint(gesorteerd);
+    tekeningLint(gesorteerd);
+    
+    // Zorgt ervoor dat alle markers netjes in het scherm passen bij openen
+    if (markerBounds.length > 0) {
+      map.fitBounds(markerBounds, { padding: [50, 50] });
+    }
+
+  } catch (error) {
+    console.error(error);
+    meldingEl.innerHTML = '⚠️ Fout bij het laden van de gegevens.<br><small>Zorg dat percelen.json correct is geüpload.</small>';
+  }
 }
 
 laadPercelen();
