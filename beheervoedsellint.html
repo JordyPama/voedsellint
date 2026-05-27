@@ -3,68 +3,322 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Voedsellint Beheer (Vlakken)</title>
+<title>Voedsellint Beheer</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: 'Segoe UI', system-ui, sans-serif; background: #f5f0e8; height: 100vh; display: flex; flex-direction: column; }
-  #map { flex: 1; width: 100%; }
-  .controls { padding: 10px; background: #2d5016; color: white; display: flex; align-items: center; gap: 15px; }
-  .btn { background: #5a8c2a; color: white; border: none; padding: 8px 16px; border-radius: 5px; cursor: pointer; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: #f5f0e8; color: #2a2a1e; min-height: 100vh; }
+  #loginScherm { position: fixed; inset: 0; background: #2d5016; display: flex; align-items: center; justify-content: center; z-index: 9999; }
+  .login-box { background: #fff; border-radius: 20px; padding: 40px 36px; width: 340px; text-align: center; box-shadow: 0 12px 48px rgba(0,0,0,0.4); }
+  .login-logo { font-size: 48px; margin-bottom: 12px; }
+  .login-box h2 { font-size: 20px; color: #1e3a08; margin-bottom: 4px; }
+  .login-box p { font-size: 13px; color: #888; margin-bottom: 24px; }
+  .login-box input { width: 100%; padding: 12px 14px; border: 1.5px solid #ddd; border-radius: 10px; font-size: 15px; text-align: center; letter-spacing: 2px; outline: none; margin-bottom: 8px; }
+  .login-box input:focus { border-color: #5a8c2a; }
+  .login-error { font-size: 12px; color: #c0392b; margin-bottom: 10px; min-height: 16px; }
+  .login-btn { width: 100%; background: #2d5016; color: #fff; border: none; padding: 13px; border-radius: 10px; font-size: 15px; font-weight: 600; cursor: pointer; }
+  .login-btn:hover { background: #3d6920; }
+  #app { display: none; }
+  header { background: #1a3a0a; color: #f0e8d0; padding: 12px 20px; display: flex; align-items: center; gap: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.3); position: relative; z-index: 2000; }
+  header .logo { width: 36px; height: 36px; background: #5a8c2a; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; }
+  header h1 { font-size: 18px; font-weight: 600; }
+  header p { font-size: 12px; color: #a8c87a; margin-top: 1px; }
+  .beheer-badge { background: #f0ad4e; color: #5a3a00; font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 8px; margin-left: 8px; letter-spacing: 0.5px; }
+  .counter { background: #5a8c2a; color: #fff; border-radius: 10px; padding: 1px 7px; font-size: 11px; font-weight: 700; margin-left: 6px; }
+  .btn-add { margin-left: auto; background: #5a8c2a; color: #f0e8d0; border: none; padding: 8px 16px; border-radius: 20px; cursor: pointer; font-size: 13px; font-weight: 500; display: flex; align-items: center; gap: 6px; transition: background 0.2s; }
+  .btn-add:hover { background: #6fa832; }
+  .btn-uitloggen { background: transparent; color: #f0ad4e; border: 1px solid #f0ad4e; padding: 7px 14px; border-radius: 20px; cursor: pointer; font-size: 12px; margin-left: 8px; }
+  #map { height: calc(100vh - 57px); width: 100%; position: relative; z-index: 1; }
+  .leaflet-popup-content-wrapper { border-radius: 12px; box-shadow: 0 4px 24px rgba(0,0,0,0.18); padding: 0; min-width: 260px; max-width: 320px; }
+  .leaflet-popup-content { margin: 0; width: 100% !important; }
+  .leaflet-popup-tip-container { display: none; }
+  .popup-img { width: 100%; height: 160px; object-fit: cover; display: block; border-radius: 12px 12px 0 0; }
+  .popup-img-placeholder { width: 100%; height: 120px; background: linear-gradient(135deg, #c8e6a0, #7ab048); display: flex; align-items: center; justify-content: center; font-size: 40px; border-radius: 12px 12px 0 0; }
+  .popup-body { padding: 14px 16px; background: #fff; border-radius: 0 0 12px 12px; }
+  .popup-title { font-size: 15px; font-weight: 700; color: #1e3a08; margin-bottom: 4px; }
+  .popup-status { display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px; margin-bottom: 8px; }
+  .status-gepland { background: #fff3cd; color: #856404; }
+  .status-bezig   { background: #cfe2ff; color: #084298; }
+  .status-klaar   { background: #d1e7dd; color: #0a3622; }
+  .popup-desc { font-size: 13px; color: #444; line-height: 1.5; margin-bottom: 6px; }
+  .popup-actions { display: flex; gap: 8px; margin-top: 10px; }
+  .popup-btn { flex: 1; padding: 6px 10px; border-radius: 8px; border: 1px solid #ccc; background: #f9f9f9; font-size: 12px; cursor: pointer; }
+  .popup-btn.danger { color: #c0392b; border-color: #f5c6cb; background: #fff0f0; }
+  .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 2000; display: none; align-items: center; justify-content: center; }
+  .overlay.active { display: flex; }
+  .sidebar { background: #fff; border-radius: 16px; padding: 28px; width: 380px; max-width: 95vw; max-height: 90vh; overflow-y: auto; box-shadow: 0 8px 40px rgba(0,0,0,0.3); }
+  .sidebar h2 { font-size: 18px; color: #1e3a08; margin-bottom: 20px; font-weight: 700; }
+  .form-group { margin-bottom: 16px; }
+  .form-group label { display: block; font-size: 13px; font-weight: 600; color: #555; margin-bottom: 5px; }
+  .form-group input, .form-group textarea, .form-group select { width: 100%; padding: 9px 12px; border: 1.5px solid #ddd; border-radius: 8px; font-size: 14px; outline: none; background: #fafafa; }
+  .form-group input:focus, .form-group textarea:focus, .form-group select:focus { border-color: #5a8c2a; background: #fff; }
+  .form-group textarea { resize: vertical; min-height: 80px; }
+  .form-row { display: flex; gap: 10px; }
+  .form-row .form-group { flex: 1; }
+  .geocode-result { font-size: 12px; color: #2d7a2d; margin-top: 4px; font-weight: 500; }
+  .btn-geocode { margin-top: 6px; background: #e8f4d4; color: #2d5016; border: 1px solid #a8c87a; padding: 7px 14px; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600; }
+  .img-preview { width: 100%; height: 120px; object-fit: cover; border-radius: 8px; margin-top: 8px; display: none; border: 1px solid #ddd; }
+  .form-buttons { display: flex; gap: 10px; margin-top: 20px; }
+  .btn-primary { flex: 1; background: #2d5016; color: #fff; border: none; padding: 11px; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; }
+  .btn-cancel { flex: 1; background: #f5f5f5; color: #555; border: 1px solid #ddd; padding: 11px; border-radius: 10px; font-size: 14px; cursor: pointer; }
+  .legend { position: absolute; bottom: 28px; left: 12px; z-index: 1000; background: rgba(255,255,255,0.93); border-radius: 10px; padding: 10px 14px; box-shadow: 0 2px 10px rgba(0,0,0,0.15); font-size: 12px; }
+  .legend-title { font-weight: 700; font-size: 11px; text-transform: uppercase; color: #555; margin-bottom: 6px; }
+  .legend-item { display: flex; align-items: center; gap: 7px; margin-bottom: 4px; }
+  .legend-dot { width: 12px; height: 12px; border-radius: 50%; border: 2px solid rgba(0,0,0,0.15); }
+  
+  /* Lader indicator */
+  #loadingStatus { position: absolute; top: 70px; left: 50%; transform: translateX(-50%); background: #2d5016; color: #fff; padding: 8px 16px; border-radius: 20px; font-size: 13px; font-weight: 600; z-index: 2000; box-shadow: 0 4px 12px rgba(0,0,0,0.2); display: none; }
 </style>
 </head>
 <body>
 
-<div class="controls">
-  <h1>Beheer Voedsellint</h1>
-  <button class="btn" onclick="saveToJSONBin()">💾 Alles opslaan naar JSONBin</button>
-  <small>Gebruik de teken-tool op de kaart voor nieuwe percelen</small>
+<div id="loginScherm">
+  <div class="login-box">
+    <div class="login-logo">🌿</div>
+    <h2>Voedsellint Beheer</h2>
+    <p>Voer het beheerwachtwoord in</p>
+    <input type="password" id="pwInput" placeholder="Wachtwoord" onkeydown="if(event.key==='Enter')checkPw()"/>
+    <div class="login-error" id="pwError"></div>
+    <button class="login-btn" onclick="checkPw()">Inloggen</button>
+  </div>
 </div>
-<div id="map"></div>
+
+<div id="app">
+  <header>
+    <div class="logo">🌿</div>
+    <div>
+      <h1>Voedsellint <span id="headerCount" class="counter">0</span> <span class="beheer-badge">BEHEER</span></h1>
+      <p>Gonzend Rivierenland — percelen beheren</p>
+    </div>
+    <button class="btn-add" onclick="openForm()">＋ Perceel toevoegen</button>
+    <button class="btn-uitloggen" onclick="uitloggen()">Uitloggen</button>
+  </header>
+
+  <div id="loadingStatus">⏳ Opslaan in de cloud...</div>
+  <div id="map"></div>
+
+  <div class="legend">
+    <div class="legend-title">Status</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#f0ad4e"></div> Gepland</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#4e9af0"></div> Bezig</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#4ea854"></div> Klaar</div>
+  </div>
+
+  <div class="overlay" id="overlay" onclick="closeIfOutside(event)">
+    <div class="sidebar">
+      <h2 id="formTitle">🌱 Perceel toevoegen</h2>
+      <div class="form-group">
+        <label>Naam perceel *</label>
+        <input type="text" id="fNaam" placeholder="bijv. Moestuin Vissershaven"/>
+      </div>
+      <div class="form-group">
+        <label>Adres of omschrijving locatie *</label>
+        <input type="text" id="fAdres" placeholder="bijv. Koningsweg 12, Varik"/>
+        <button class="btn-geocode" onclick="geocodeAdres()">📍 Zoek locatie op kaart</button>
+        <div id="geocodeResult" class="geocode-result"></div>
+      </div>
+      <div class="form-row" id="coordRow" style="display:none">
+        <div class="form-group">
+          <label>Breedtegraad (lat)</label>
+          <input type="number" id="fLat" step="0.000001"/>
+        </div>
+        <div class="form-group">
+          <label>Lengtegraad (lng)</label>
+          <input type="number" id="fLng" step="0.000001"/>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Status</label>
+        <select id="fStatus">
+          <option value="gepland">🟡 Gepland</option>
+          <option value="bezig">🔵 Bezig</option>
+          <option value="klaar">🟢 Klaar</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Wat er gedaan is / beschrijving</label>
+        <textarea id="fBeschrijving" placeholder="Beschrijf de werkzaamheden..."></textarea>
+      </div>
+      <div class="form-group">
+        <label>Foto URL (optioneel)</label>
+        <input type="text" id="fFoto" placeholder="https://..." oninput="previewFoto()"/>
+        <img id="fotoPreview" class="img-preview" alt="Voorvertoning"/>
+      </div>
+      <div class="form-buttons">
+        <button class="btn-cancel" onclick="closeForm()">Annuleren</button>
+        <button class="btn-primary" onclick="savePerceel()">Opslaan</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <script>
-let map = L.map('map').setView([51.87, 5.38], 13);
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+// --- VUL HIER JOUW CODES IN ---
+const WACHTWOORD = 'Michielenhilde26'; 
+const JSONBIN_ID = 'JOUW_BIN_ID_HIER';
+const JSONBIN_KEY = 'JOUW_MASTER_KEY_HIER'; // Begint vaak met $2a$10$...
+// ------------------------------
 
-let drawnItems = new L.FeatureGroup().addTo(map);
-let drawControl = new L.Control.Draw({
-  draw: { polygon: { shapeOptions: { color: '#5a8c2a' } }, polyline: false, circle: false, marker: false, rectangle: true },
-  edit: { featureGroup: drawnItems }
-});
-map.addControl(drawControl);
+let map, percelen = [], editingId = null, markers = {};
+let lintLaag = null;
+const statusKleur = { gepland: '#f0ad4e', bezig: '#4e9af0', klaar: '#4ea854' };
+const statusLabel  = { gepland: 'Gepland', bezig: 'Bezig', klaar: 'Klaar' };
+const statusClass  = { gepland: 'status-gepland', bezig: 'status-bezig', klaar: 'status-klaar' };
 
-// Als er getekend wordt
-map.on(L.Draw.Event.CREATED, function (e) {
-  let layer = e.layer;
-  drawnItems.addLayer(layer);
-  layer.bindPopup("Nieuw perceel getekend!");
-});
+function checkPw() {
+  if (document.getElementById('pwInput').value === WACHTWOORD) {
+    document.getElementById('loginScherm').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    initKaart();
+  } else {
+    document.getElementById('pwError').textContent = '❌ Onjuist wachtwoord';
+  }
+}
 
-async function saveToJSONBin() {
-  // Verzamel alle getekende polygonen
-  let percelen = [];
-  drawnItems.eachLayer(function (layer) {
-    if (layer instanceof L.Polygon) {
-      percelen.push({
-        id: Date.now(),
-        coordinaten: layer.getLatLngs()[0].map(p => [p.lat, p.lng])
-      });
+function uitloggen() { location.reload(); }
+function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
+
+async function initKaart() {
+  map = L.map('map').setView([51.87, 5.38], 12);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+  
+  try {
+    const res = await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_ID}/latest`);
+    if (res.ok) {
+      const data = await res.json();
+      percelen = data.record;
     }
-  });
+  } catch(e) { console.error("Fout bij laden van cloud", e); }
+  renderAlles();
+}
 
-  // Hier vul je jouw eigen JSONBin ID en Master Key in
-  const BIN_ID = '6a175381ddf5aa59f76d64e8'; 
-  const API_KEY = '$2a$10$vbM.Jgf1lKg2xftJcoFMgulvnUHwiUOheAZfE3vEptV8LsAWbLQJ.';
+// Data pushen naar JSONBin
+async function syncNaarCloud() {
+  const lader = document.getElementById('loadingStatus');
+  lader.textContent = '⏳ Opslaan in de cloud...';
+  lader.style.display = 'block';
+  
+  try {
+    await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_ID}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Master-Key': JSONBIN_KEY
+      },
+      body: JSON.stringify(percelen)
+    });
+    lader.textContent = '✅ Succesvol opgeslagen!';
+    setTimeout(() => lader.style.display = 'none', 2000);
+  } catch (error) {
+    lader.textContent = '❌ Oeps, er ging iets mis bij het opslaan.';
+    lader.style.background = '#c0392b';
+    setTimeout(() => { lader.style.display = 'none'; lader.style.background = '#2d5016'; }, 3000);
+  }
+}
 
-  await fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json', 'X-Master-Key': API_KEY },
-    body: JSON.stringify(percelen)
+function maakMarker(p) {
+  const kleur = statusKleur[p.status] || '#888';
+  const icon = L.divIcon({
+    className: '',
+    html: `<div style="width:34px;height:34px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:${kleur};border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;"><span style="transform:rotate(45deg);font-size:15px;line-height:1;">🌿</span></div>`,
+    iconSize: [34, 34], iconAnchor: [17, 34], popupAnchor: [0, -36]
   });
-  alert('Opgeslagen!');
+  const fotoHtml = p.foto ? `<img src="${p.foto}" class="popup-img" alt="Foto" onerror="this.style.display='none'"/>` : `<div class="popup-img-placeholder">🌿</div>`;
+  const m = L.marker([p.lat, p.lng], { icon }).addTo(map);
+  m.bindPopup(`
+    <div>${fotoHtml}<div class="popup-body"><div class="popup-title">${escHtml(p.naam)}</div><span class="popup-status ${statusClass[p.status]}">${statusLabel[p.status]}</span><div class="popup-desc">${escHtml(p.beschrijving || '—')}</div>${p.adres ? `<div style="font-size:11px;color:#888;">📍 ${escHtml(p.adres)}</div>` : ''}<div class="popup-actions"><button class="popup-btn" onclick="editPerceel('${p.id}')">✏️ Bewerken</button><button class="popup-btn danger" onclick="verwijderPerceel('${p.id}')">🗑 Verwijder</button></div></div></div>
+  `, { maxWidth: 320 });
+  markers[p.id] = m;
+}
+
+function tekeningLint(gesorteerd) {
+  if (lintLaag) { map.removeLayer(lintLaag); }
+  if (gesorteerd.length < 2) return;
+  const turfCoords = gesorteerd.map(p => [p.lng, p.lat]);
+  const curveCoords = turf.bezierSpline(turf.lineString(turfCoords), { resolution: 10000, sharpness: 0.85 }).geometry.coordinates.map(c => [c[1], c[0]]);
+  lintLaag = L.polyline([], { color: '#5a8c2a', weight: 5, opacity: 0.7, lineCap: 'round', lineJoin: 'round' }).addTo(map);
+  let i = 0;
+  function animatieLoop() { if (i < curveCoords.length) { lintLaag.addLatLng(curveCoords[i]); i += 4; requestAnimationFrame(animatieLoop); } }
+  setTimeout(animatieLoop, 400);
+}
+
+function renderAlles() {
+  Object.values(markers).forEach(m => map.removeLayer(m));
+  markers = {};
+  const gesorteerd = [...percelen].sort((a, b) => b.lat - a.lat);
+  gesorteerd.forEach(p => maakMarker(p));
+  document.getElementById('headerCount').textContent = percelen.length;
+  tekeningLint(gesorteerd);
+}
+
+function openForm(p) {
+  editingId = p ? p.id : null;
+  document.getElementById('formTitle').textContent = p ? '✏️ Perceel bewerken' : '🌱 Perceel toevoegen';
+  document.getElementById('fNaam').value = p ? p.naam : '';
+  document.getElementById('fAdres').value = p ? (p.adres || '') : '';
+  document.getElementById('fLat').value = p ? p.lat : '';
+  document.getElementById('fLng').value = p ? p.lng : '';
+  document.getElementById('fStatus').value = p ? p.status : 'gepland';
+  document.getElementById('fBeschrijving').value = p ? (p.beschrijving || '') : '';
+  document.getElementById('fFoto').value = p ? (p.foto || '') : '';
+  document.getElementById('geocodeResult').textContent = '';
+  document.getElementById('coordRow').style.display = p ? 'flex' : 'none';
+  previewFoto(); document.getElementById('overlay').classList.add('active');
+}
+
+function closeForm() { document.getElementById('overlay').classList.remove('active'); editingId = null; }
+function closeIfOutside(e) { if (e.target === document.getElementById('overlay')) closeForm(); }
+function previewFoto() { const url = document.getElementById('fFoto').value.trim(); const prev = document.getElementById('fotoPreview'); if (url) { prev.src = url; prev.style.display = 'block'; } else { prev.style.display = 'none'; } }
+
+async function geocodeAdres() {
+  const adres = document.getElementById('fAdres').value.trim();
+  if (!adres) return alert('Voer eerst een adres in.');
+  const resultEl = document.getElementById('geocodeResult');
+  resultEl.style.color = '#888'; resultEl.textContent = '⏳ Bezig met zoeken...';
+  try {
+    const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(adres)}&format=json&limit=1&countrycodes=nl`, { headers: { 'Accept-Language': 'nl' } });
+    const data = await res.json();
+    if (!data.length) { resultEl.style.color = '#c0392b'; resultEl.textContent = '❌ Adres niet gevonden.'; return; }
+    document.getElementById('fLat').value = parseFloat(data[0].lat).toFixed(6);
+    document.getElementById('fLng').value = parseFloat(data[0].lon).toFixed(6);
+    document.getElementById('coordRow').style.display = 'flex';
+    resultEl.style.color = '#2d7a2d'; resultEl.textContent = `✅ Gevonden!`;
+    map.setView([data[0].lat, data[0].lon], 15);
+  } catch(e) { resultEl.style.color = '#c0392b'; resultEl.textContent = '❌ Fout bij zoeken.'; }
+}
+
+async function savePerceel() {
+  const naam = document.getElementById('fNaam').value.trim();
+  const lat  = parseFloat(document.getElementById('fLat').value);
+  const lng  = parseFloat(document.getElementById('fLng').value);
+  if (!naam) return alert('Vul een naam in.');
+  if (isNaN(lat) || isNaN(lng)) return alert('Zoek eerst de locatie op.');
+  
+  const perceel = {
+    id: editingId || genId(), naam, adres: document.getElementById('fAdres').value.trim(),
+    lat, lng, status: document.getElementById('fStatus').value,
+    beschrijving: document.getElementById('fBeschrijving').value.trim(),
+    foto: document.getElementById('fFoto').value.trim()
+  };
+  
+  if (editingId) {
+    const idx = percelen.findIndex(p => p.id === editingId);
+    if (idx !== -1) percelen[idx] = perceel;
+  } else { percelen.push(perceel); }
+  
+  renderAlles(); closeForm();
+  await syncNaarCloud(); // Automatisch naar de cloud sturen
+}
+
+function editPerceel(id) { const p = percelen.find(x => x.id === id); if (p) { map.closePopup(); openForm(p); } }
+async function verwijderPerceel(id) {
+  if (!confirm('Perceel definitief verwijderen?')) return;
+  percelen = percelen.filter(p => p.id !== id);
+  renderAlles(); map.closePopup();
+  await syncNaarCloud(); // Automatisch update naar de cloud
 }
 </script>
 </body>
