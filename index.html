@@ -6,15 +6,18 @@
 <title>Voedsellint — Gonzend Rivierenland</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: 'Segoe UI', system-ui, sans-serif; background: #f5f0e8; color: #2a2a1e; min-height: 100vh; }
-  header { background: #2d5016; color: #f0e8d0; padding: 12px 20px; display: flex; align-items: center; gap: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.3); }
+  header { background: #2d5016; color: #f0e8d0; padding: 12px 20px; display: flex; align-items: center; gap: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.3); position: relative; z-index: 2000; }
   header .logo { width: 36px; height: 36px; background: #5a8c2a; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; }
   header h1 { font-size: 18px; font-weight: 600; }
   header p { font-size: 12px; color: #a8c87a; margin-top: 1px; }
   .counter { background: #5a8c2a; color: #fff; border-radius: 10px; padding: 1px 7px; font-size: 11px; font-weight: 700; margin-left: 6px; }
-  #map { height: calc(100vh - 57px); width: 100%; }
+  
+  #map { height: calc(100vh - 57px); width: 100%; position: relative; z-index: 1; }
+  
   .leaflet-popup-content-wrapper { border-radius: 12px; box-shadow: 0 4px 24px rgba(0,0,0,0.18); border: none; overflow: hidden; padding: 0; min-width: 260px; max-width: 320px; }
   .leaflet-popup-content { margin: 0; width: 100% !important; }
   .leaflet-popup-tip-container { display: none; }
@@ -27,11 +30,13 @@
   .status-bezig   { background: #cfe2ff; color: #084298; }
   .status-klaar   { background: #d1e7dd; color: #0a3622; }
   .popup-desc { font-size: 13px; color: #444; line-height: 1.5; margin-bottom: 6px; }
+  
   .legend { position: absolute; bottom: 28px; left: 12px; z-index: 1000; background: rgba(255,255,255,0.93); border-radius: 10px; padding: 10px 14px; box-shadow: 0 2px 10px rgba(0,0,0,0.15); font-size: 12px; color: #333; }
   .legend-title { font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #555; margin-bottom: 6px; }
   .legend-item { display: flex; align-items: center; gap: 7px; margin-bottom: 4px; }
   .legend-dot { width: 12px; height: 12px; border-radius: 50%; border: 2px solid rgba(0,0,0,0.15); }
-  .status-melding { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1000; background: rgba(255,255,255,0.95); border-radius: 12px; padding: 20px 28px; text-align: center; box-shadow: 0 2px 16px rgba(0,0,0,0.12); font-size: 14px; color: #555; }
+  
+  .geen-percelen { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1000; background: rgba(255,255,255,0.95); border-radius: 12px; padding: 20px 28px; text-align: center; box-shadow: 0 2px 16px rgba(0,0,0,0.12); font-size: 14px; color: #555; display: none; }
 </style>
 </head>
 <body>
@@ -52,12 +57,12 @@
   <div class="legend-item"><div class="legend-dot" style="background:#4ea854"></div> Klaar</div>
 </div>
 
-<div class="status-melding" id="statusMelding">
-  ⏳ Kaart en percelen worden geladen...
+<div class="geen-percelen" id="geenPercelen">
+  🌱 Er zijn nog geen percelen toegevoegd of geladen.
 </div>
 
 <script>
-const map = L.map('map').setView([51.87, 5.38], 11);
+const map = L.map('map').setView([51.87, 5.38], 12);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   attribution: '© <a href="https://openstreetmap.org">OpenStreetMap</a>', maxZoom: 19
 }).addTo(map);
@@ -72,97 +77,76 @@ function escHtml(s) {
 
 function tekeningLint(gesorteerd) {
   if (gesorteerd.length < 2) return;
-  const coords = gesorteerd.map(p => [p.lat, p.lng]);
-  let huidig = 0;
+  
+  // 1. Zet coördinaten om voor Turf.js [Lng, Lat]
+  const turfCoords = gesorteerd.map(p => [p.lng, p.lat]);
+  const linestring = turf.lineString(turfCoords);
 
-  const lijn = L.polyline([coords[0]], {
-    color: '#3a7d1e', weight: 3, opacity: 0.65, lineCap: 'round', lineJoin: 'round'
+  // 2. Bereken de vloeiende curve
+  const curved = turf.bezierSpline(linestring, { resolution: 10000, sharpness: 0.85 });
+
+  // 3. Zet terug naar Leaflet formaat [Lat, Lng]
+  const curveCoords = curved.geometry.coordinates.map(c => [c[1], c[0]]);
+
+  const lijn = L.polyline([], {
+    color: '#5a8c2a', weight: 5, opacity: 0.7, lineCap: 'round', lineJoin: 'round'
   }).addTo(map);
 
-  const STAPPEN = 30;
-  const VERTRAGING = 15;
-
-  function interpoleer(a, b, t) {
-    return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
-  }
-
-  function tekenSegment(van, naar, stap) {
-    if (stap > STAPPEN) {
-      lijn.addLatLng(naar);
-      huidig++;
-      if (huidig < coords.length - 1) {
-        setTimeout(() => tekenSegment(coords[huidig], coords[huidig + 1], 0), VERTRAGING);
-      }
-      return;
+  let i = 0;
+  function animatieLoop() {
+    if (i < curveCoords.length) {
+      lijn.addLatLng(curveCoords[i]);
+      i += 4; // Bepaalt de snelheid van de animatie
+      requestAnimationFrame(animatieLoop);
     }
-    const punten = lijn.getLatLngs();
-    punten[punten.length - 1] = interpoleer(van, naar, stap / STAPPEN);
-    lijn.setLatLngs(punten);
-    setTimeout(() => tekenSegment(van, naar, stap + 1), VERTRAGING);
   }
-
-  setTimeout(() => tekenSegment(coords[0], coords[1], 0), 400);
+  setTimeout(animatieLoop, 400);
 }
 
 async function laadPercelen() {
-  const meldingEl = document.getElementById('statusMelding');
+  let percelen = [];
   try {
-    // We fetches het JSON bestand dat je uploadt via het beheerpaneel
-    const response = await fetch('percelen.json');
-    if (!response.ok) throw new Error('Kon percelen.json niet vinden');
-    
-    const percelen = await response.json();
-    
-    if (percelen.length === 0) {
-      meldingEl.textContent = '🌱 Er zijn momenteel geen actieve percelen op de kaart.';
-      return;
+    // Cache buster toegevoegd zodat we altijd de laatste data van GitHub krijgen
+    const res = await fetch('percelen.json?t=' + new Date().getTime());
+    if (res.ok) {
+      percelen = await res.json();
     }
-    
-    meldingEl.style.display = 'none';
-    document.getElementById('headerCount').textContent = percelen.length;
-
-    // Sorteren van Noord naar Zuid voor de logische lijn-animatie
-    const gesorteerd = [...percelen].sort((a, b) => b.lat - a.lat);
-    const markerBounds = [];
-
-    gesorteerd.forEach(p => {
-      const kleur = statusKleur[p.status] || '#888';
-      const icon = L.divIcon({
-        className: '',
-        html: `<div style="width:34px;height:34px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:${kleur};border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;"><span style="transform:rotate(45deg);font-size:15px;line-height:1;">🌿</span></div>`,
-        iconSize: [34, 34], iconAnchor: [17, 34], popupAnchor: [0, -36]
-      });
-      
-      const fotoHtml = p.foto
-        ? `<img src="${p.foto}" class="popup-img" alt="Foto" onerror="this.style.display='none'"/>`
-        : `<div class="popup-img-placeholder">🌿</div>`;
-        
-      L.marker([p.lat, p.lng], { icon }).addTo(map).bindPopup(`
-        <div>
-          ${fotoHtml}
-          <div class="popup-body">
-            <div class="popup-title">${escHtml(p.naam)}</div>
-            <span class="popup-status ${statusClass[p.status]}">${statusLabel[p.status]}</span>
-            <div class="popup-desc">${escHtml(p.beschrijving || '—')}</div>
-            ${p.adres ? `<div style="font-size:11px;color:#888;">📍 ${escHtml(p.adres)}</div>` : ''}
-          </div>
-        </div>
-      `, { maxWidth: 320 });
-      
-      markerBounds.push([p.lat, p.lng]);
-    });
-
-    tekeningLint(gesorteerd);
-    
-    // Zorgt ervoor dat alle markers netjes in het scherm passen bij openen
-    if (markerBounds.length > 0) {
-      map.fitBounds(markerBounds, { padding: [50, 50] });
-    }
-
-  } catch (error) {
-    console.error(error);
-    meldingEl.innerHTML = '⚠️ Fout bij het laden van de gegevens.<br><small>Zorg dat percelen.json correct is geüpload.</small>';
+  } catch (e) {
+    console.error("Fout bij laden van percelen.json", e);
   }
+
+  document.getElementById('headerCount').textContent = percelen.length;
+  document.getElementById('geenPercelen').style.display = percelen.length === 0 ? 'block' : 'none';
+
+  // Sorteren (bijvoorbeeld van noord naar zuid, kan later aangepast worden)
+  const gesorteerd = [...percelen].sort((a, b) => b.lat - a.lat);
+
+  gesorteerd.forEach(p => {
+    const kleur = statusKleur[p.status] || '#888';
+    const icon = L.divIcon({
+      className: '',
+      html: `<div style="width:34px;height:34px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:${kleur};border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;"><span style="transform:rotate(45deg);font-size:15px;line-height:1;">🌿</span></div>`,
+      iconSize: [34, 34], iconAnchor: [17, 34], popupAnchor: [0, -36]
+    });
+    
+    const fotoHtml = p.foto
+      ? `<img src="${p.foto}" class="popup-img" alt="Foto" onerror="this.style.display='none'"/>`
+      : `<div class="popup-img-placeholder">🌿</div>`;
+      
+    L.marker([p.lat, p.lng], { icon }).addTo(map).bindPopup(`
+      <div>
+        ${fotoHtml}
+        <div class="popup-body">
+          <div class="popup-title">${escHtml(p.naam)}</div>
+          <span class="popup-status ${statusClass[p.status]}">${statusLabel[p.status]}</span>
+          <div class="popup-desc">${escHtml(p.beschrijving || '—')}</div>
+          ${p.adres ? `<div style="font-size:11px;color:#888;">📍 ${escHtml(p.adres)}</div>` : ''}
+        </div>
+      </div>
+    `, { maxWidth: 320 });
+  });
+
+  tekeningLint(gesorteerd);
 }
 
 laadPercelen();
