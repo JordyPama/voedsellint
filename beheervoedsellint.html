@@ -238,7 +238,7 @@ function tekeningLint(gesorteerd) {
   if (lintLaag) { map.removeLayer(lintLaag); }
   if (gesorteerd.length < 2) return;
   const turfCoords = gesorteerd.map(p => [p.lng, p.lat]);
-  const curveCoords = turf.bezierSpline(turf.lineString(turfCoords), { resolution: 10000, sharpness: 0.85 }).geometry.coordinates.map(c => [c[1], c[0]]);
+  const curveCoords = turf.bezierSpline(turf.lineString(turfCoords), { resolution: 10000, sharpness: 0.35 }).geometry.coordinates.map(c => [c[1], c[0]]);
   lintLaag = L.polyline([], { color: '#5a8c2a', weight: 5, opacity: 0.7, lineCap: 'round', lineJoin: 'round' }).addTo(map);
   let i = 0;
   function animatieLoop() { if (i < curveCoords.length) { lintLaag.addLatLng(curveCoords[i]); i += 4; requestAnimationFrame(animatieLoop); } }
