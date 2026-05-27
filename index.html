@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Voedsellint Kaart</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: #f5f0e8;
+    color: #2a2a1e;
+    min-height: 100vh;
+  }
+
+  header {
+    background: #2d5016;
+    color: #f0e8d0;
+    padding: 12px 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  }
+
+  header .logo {
+    width: 36px; height: 36px;
+    background: #5a8c2a;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px;
+  }
+
+  header h1 {
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+  }
+
+  header p {
+    font-size: 12px;
+    color: #a8c87a;
+    margin-top: 1px;
+  }
+
+  header .btn-add {
+    margin-left: auto;
+    background: #5a8c2a;
+    color: #f0e8d0;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 20px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    display: flex; align-items: center; gap: 6px;
+    transition: background 0.2s;
+  }
+  header .btn-add:hover { background: #6fa832; }
+
+  #map {
+    height: calc(100vh - 57px);
+    width: 100%;
+  }
+
+  /* Popup styles */
+  .leaflet-popup-content-wrapper {
+    border-radius: 12px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.18);
+    border: none;
+    overflow: hidden;
+    padding: 0;
+    min-width: 260px;
+    max-width: 320px;
+  }
+  .leaflet-popup-content { margin: 0; width: 100% !important; }
+  .leaflet-popup-tip-container { display: none; }
+
+  .popup-img {
+    width: 100%;
+    height: 160px;
+    object-fit: cover;
+    display: block;
+  }
+
+  .popup-img-placeholder {
+    width: 100%;
+    height: 120px;
+    background: linear-gradient(135deg, #c8e6a0, #7ab048);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 40px;
+  }
+
+  .popup-body {
+    padding: 14px 16px;
+    background: #fff;
+  }
+
+  .popup-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: #1e3a08;
+    margin-bottom: 4px;
+  }
+
+  .popup-status {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 10px;
+    margin-bottom: 8px;
+  }
+  .status-gepland { background: #fff3cd; color: #856404; }
+  .status-bezig   { background: #cfe2ff; color: #084298; }
+  .status-klaar   { background: #d1e7dd; color: #0a3622; }
+
+  .popup-desc {
+    font-size: 13px;
+    color: #444;
+    line-height: 1.5;
+    margin-bottom: 8px;
+  }
+
+  .popup-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  .popup-btn {
+    flex: 1;
+    padding: 6px 10px;
+    border-radius: 8px;
+    border: 1px solid #ccc;
+    background: #f9f9f9;
+    font-size: 12px;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .popup-btn:hover { background: #eee; }
+  .popup-btn.danger { color: #c0392b; border-color: #f5c6cb; background: #fff0f0; }
+  .popup-btn.danger:hover { background: #ffe0e0; }
+
+  /* Sidebar / modal */
+  .overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.45);
+    z-index: 2000;
+    display: none;
+    align-items: center;
+    justify-content: center;
+  }
+  .overlay.active { display: flex; }
+
+  .sidebar {
+    background: #fff;
+    border-radius: 16px;
+    padding: 28px;
+    width: 380px;
+    max-width: 95vw;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.3);
+  }
+
+  .sidebar h2 {
+    font-size: 18px;
+    color: #1e3a08;
+    margin-bottom: 20px;
+    font-weight: 700;
+  }
+
+  .form-group {
+    margin-bottom: 16px;
+  }
+
+  .form-group label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    color: #555;
+    margin-bottom: 5px;
+  }
+
+  .form-group input,
+  .form-group textarea,
+  .form-group select {
+    width: 100%;
+    padding: 9px 12px;
+    border: 1.5px solid #ddd;
+    border-radius: 8px;
+    font-size: 14px;
+    font-family: inherit;
+    outline: none;
+    transition: border-color 0.2s;
+    background: #fafafa;
+  }
+
+  .form-group input:focus,
+  .form-group textarea:focus,
+  .form-group select:focus { border-color: #5a8c2a; background: #fff; }
+
+  .form-group textarea { resize: vertical; min-height: 80px; }
+
+  .form-row { display: flex; gap: 10px; }
+  .form-row .form-group { flex: 1; }
+
+  .geocode-hint {
+    font-size: 12px;
+    color: #888;
+    margin-top: 4px;
+  }
+
+  .geocode-result {
+    font-size: 12px;
+    color: #2d7a2d;
+    margin-top: 4px;
+    font-weight: 500;
+  }
+
+  .geocode-error {
+    font-size: 12px;
+    color: #c0392b;
+    margin-top: 4px;
+  }
+
+  .btn-geocode {
+    margin-top: 6px;
+    background: #e8f4d4;
+    color: #2d5016;
+    border: 1px solid #a8c87a;
+    padding: 7px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .btn-geocode:hover { background: #cde8a0; }
+
+  .img-preview {
+    width: 100%;
+    height: 120px;
+    object-fit: cover;
+    border-radius: 8px;
+    margin-top: 8px;
+    display: none;
+    border: 1px solid #ddd;
+  }
+
+  .form-buttons {
+    display: flex;
+    gap: 10px;
+    margin-top: 20px;
+  }
+
+  .btn-primary {
+    flex: 1;
+    background: #2d5016;
+    color: #fff;
+    border: none;
+    padding: 11px;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  .btn-primary:hover { background: #3d6920; }
+
+  .btn-cancel {
+    flex: 1;
+    background: #f5f5f5;
+    color: #555;
+    border: 1px solid #ddd;
+    padding: 11px;
+    border-radius: 10px;
+    font-size: 14px;
+    cursor: pointer;
+  }
+  .btn-cancel:hover { background: #e9e9e9; }
+
+  /* Custom marker */
+  .map-marker {
+    width: 36px; height: 36px;
+    border-radius: 50% 50% 50% 0;
+    transform: rotate(-45deg);
+    border: 3px solid #fff;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  }
+  .marker-gepland { background: #f0ad4e; }
+  .marker-bezig   { background: #4e9af0; }
+  .marker-klaar   { background: #4ea854; }
+
+  .marker-inner {
+    width: 100%; height: 100%;
+    display: flex; align-items: center; justify-content: center;
+    transform: rotate(45deg);
+    font-size: 16px;
+  }
+
+  /* Legend */
+  .legend {
+    position: absolute;
+    bottom: 28px;
+    left: 12px;
+    z-index: 1000;
+    background: rgba(255,255,255,0.93);
+    border-radius: 10px;
+    padding: 10px 14px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.15);
+    font-size: 12px;
+    color: #333;
+  }
+  .legend-title {
+    font-weight: 700;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #555;
+    margin-bottom: 6px;
+  }
+  .legend-item {
+    display: flex; align-items: center; gap: 7px;
+    margin-bottom: 4px;
+  }
+  .legend-dot {
+    width: 12px; height: 12px; border-radius: 50%;
+    border: 2px solid rgba(0,0,0,0.15);
+  }
+
+  .export-btn {
+    position: absolute;
+    bottom: 28px;
+    right: 46px;
+    z-index: 1000;
+    background: #2d5016;
+    color: #fff;
+    border: none;
+    padding: 8px 14px;
+    border-radius: 8px;
+    font-size: 12px;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  }
+  .export-btn:hover { background: #3d6920; }
+
+  .counter {
+    background: #5a8c2a;
+    color: #fff;
+    border-radius: 10px;
+    padding: 1px 7px;
+    font-size: 11px;
+    font-weight: 700;
+    margin-left: 6px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">🌿</div>
+  <div>
+    <h1>Voedsellint <span id="headerCount" class="counter">0</span></h1>
+    <p>Gonzend Rivierenland — interactieve percelenkaart</p>
+  </div>
+  <button class="btn-add" onclick="openForm()">＋ Perceel toevoegen</button>
+</header>
+
+<div id="map"></div>
+
+<div class="legend">
+  <div class="legend-title">Status</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#f0ad4e"></div> Gepland</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#4e9af0"></div> Bezig</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#4ea854"></div> Klaar</div>
+</div>
+
+<button class="export-btn" onclick="exportData()">📥 Exporteer JSON</button>
+
+<!-- Form modal -->
+<div class="overlay" id="overlay" onclick="closeIfOutside(event)">
+  <div class="sidebar" id="sidebarBox">
+    <h2 id="formTitle">🌱 Perceel toevoegen</h2>
+
+    <div class="form-group">
+      <label>Naam perceel *</label>
+      <input type="text" id="fNaam" placeholder="bijv. Moestuin Vissershaven"/>
+    </div>
+
+    <div class="form-group">
+      <label>Adres of omschrijving locatie *</label>
+      <input type="text" id="fAdres" placeholder="bijv. Koningsweg 12, Varik"/>
+      <button class="btn-geocode" onclick="geocodeAdres()">📍 Zoek locatie op kaart</button>
+      <div id="geocodeResult" class="geocode-result"></div>
+    </div>
+
+    <div class="form-row" id="coordRow" style="display:none">
+      <div class="form-group">
+        <label>Breedtegraad (lat)</label>
+        <input type="number" id="fLat" step="0.000001" placeholder="51.8..."/>
+      </div>
+      <div class="form-group">
+        <label>Lengtegraad (lng)</label>
+        <input type="number" id="fLng" step="0.000001" placeholder="5.3..."/>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>Status</label>
+      <select id="fStatus">
+        <option value="gepland">🟡 Gepland</option>
+        <option value="bezig">🔵 Bezig</option>
+        <option value="klaar">🟢 Klaar</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label>Wat er gedaan is / beschrijving</label>
+      <textarea id="fBeschrijving" placeholder="Beschrijf de werkzaamheden, beplanting, bijzonderheden..."></textarea>
+    </div>
+
+    <div class="form-group">
+      <label>Foto URL (optioneel)</label>
+      <input type="text" id="fFoto" placeholder="https://..." oninput="previewFoto()"/>
+      <img id="fotoPreview" class="img-preview" alt="Voorvertoning foto"/>
+      <div class="geocode-hint">Plak een URL naar een afbeelding (bijv. via Google Drive, Imgur)</div>
+    </div>
+
+    <div class="form-buttons">
+      <button class="btn-cancel" onclick="closeForm()">Annuleren</button>
+      <button class="btn-primary" onclick="savePerceel()">Opslaan</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const MAP_CENTER = [51.87, 5.38];
+const MAP_ZOOM = 12;
+
+const map = L.map('map', { zoomControl: true }).setView(MAP_CENTER, MAP_ZOOM);
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '© <a href="https://openstreetmap.org">OpenStreetMap</a>',
+  maxZoom: 19
+}).addTo(map);
+
+let percelen = JSON.parse(localStorage.getItem('voedsellint_percelen') || '[]');
+let editingId = null;
+let markers = {};
+
+const statusKleur = { gepland: '#f0ad4e', bezig: '#4e9af0', klaar: '#4ea854' };
+const statusLabel  = { gepland: 'Gepland', bezig: 'Bezig', klaar: 'Klaar' };
+const statusClass  = { gepland: 'status-gepland', bezig: 'status-bezig', klaar: 'status-klaar' };
+
+function maakMarker(p) {
+  const kleur = statusKleur[p.status] || '#888';
+  const icon = L.divIcon({
+    className: '',
+    html: `<div style="width:34px;height:34px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:${kleur};border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;">
+             <span style="transform:rotate(45deg);font-size:15px;line-height:1;">🌿</span>
+           </div>`,
+    iconSize: [34, 34],
+    iconAnchor: [17, 34],
+    popupAnchor: [0, -36]
+  });
+
+  const m = L.marker([p.lat, p.lng], { icon }).addTo(map);
+
+  const fotoHtml = p.foto
+    ? `<img src="${p.foto}" class="popup-img" alt="Foto perceel" onerror="this.style.display='none'"/>`
+    : `<div class="popup-img-placeholder">🌿</div>`;
+
+  m.bindPopup(`
+    <div>
+      ${fotoHtml}
+      <div class="popup-body">
+        <div class="popup-title">${escHtml(p.naam)}</div>
+        <span class="popup-status ${statusClass[p.status]}">${statusLabel[p.status]}</span>
+        <div class="popup-desc">${escHtml(p.beschrijving || '—')}</div>
+        ${p.adres ? `<div style="font-size:11px;color:#888;">📍 ${escHtml(p.adres)}</div>` : ''}
+        <div class="popup-actions">
+          <button class="popup-btn" onclick="editPerceel('${p.id}')">✏️ Bewerken</button>
+          <button class="popup-btn danger" onclick="verwijderPerceel('${p.id}')">🗑 Verwijder</button>
+        </div>
+      </div>
+    </div>
+  `, { maxWidth: 320 });
+
+  markers[p.id] = m;
+  return m;
+}
+
+function renderAlles() {
+  Object.values(markers).forEach(m => map.removeLayer(m));
+  markers = {};
+  percelen.forEach(p => maakMarker(p));
+  document.getElementById('headerCount').textContent = percelen.length;
+}
+
+function slaOp() {
+  localStorage.setItem('voedsellint_percelen', JSON.stringify(percelen));
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function genId() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2);
+}
+
+function openForm(p) {
+  editingId = p ? p.id : null;
+  document.getElementById('formTitle').textContent = p ? '✏️ Perceel bewerken' : '🌱 Perceel toevoegen';
+  document.getElementById('fNaam').value = p ? p.naam : '';
+  document.getElementById('fAdres').value = p ? (p.adres || '') : '';
+  document.getElementById('fLat').value = p ? p.lat : '';
+  document.getElementById('fLng').value = p ? p.lng : '';
+  document.getElementById('fStatus').value = p ? p.status : 'gepland';
+  document.getElementById('fBeschrijving').value = p ? (p.beschrijving || '') : '';
+  document.getElementById('fFoto').value = p ? (p.foto || '') : '';
+  document.getElementById('geocodeResult').textContent = p ? `📍 ${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}` : '';
+  document.getElementById('coordRow').style.display = p ? 'flex' : 'none';
+  previewFoto();
+  document.getElementById('overlay').classList.add('active');
+}
+
+function closeForm() {
+  document.getElementById('overlay').classList.remove('active');
+  editingId = null;
+}
+
+function closeIfOutside(e) {
+  if (e.target === document.getElementById('overlay')) closeForm();
+}
+
+function previewFoto() {
+  const url = document.getElementById('fFoto').value.trim();
+  const prev = document.getElementById('fotoPreview');
+  if (url) { prev.src = url; prev.style.display = 'block'; }
+  else { prev.style.display = 'none'; }
+}
+
+async function geocodeAdres() {
+  const adres = document.getElementById('fAdres').value.trim();
+  if (!adres) { alert('Voer eerst een adres in.'); return; }
+  const resultEl = document.getElementById('geocodeResult');
+  resultEl.style.color = '#888';
+  resultEl.textContent = '⏳ Bezig met zoeken...';
+
+  try {
+    const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(adres)}&format=json&limit=1&countrycodes=nl`, {
+      headers: { 'Accept-Language': 'nl' }
+    });
+    const data = await res.json();
+    if (!data.length) {
+      resultEl.style.color = '#c0392b';
+      resultEl.textContent = '❌ Adres niet gevonden. Probeer een ander adres.';
+      return;
+    }
+    const { lat, lon, display_name } = data[0];
+    document.getElementById('fLat').value = parseFloat(lat).toFixed(6);
+    document.getElementById('fLng').value = parseFloat(lon).toFixed(6);
+    document.getElementById('coordRow').style.display = 'flex';
+    resultEl.style.color = '#2d7a2d';
+    resultEl.textContent = `✅ Gevonden: ${display_name.split(',').slice(0,3).join(', ')}`;
+    map.setView([lat, lon], 15);
+  } catch(e) {
+    resultEl.style.color = '#c0392b';
+    resultEl.textContent = '❌ Fout bij ophalen locatie.';
+  }
+}
+
+function savePerceel() {
+  const naam = document.getElementById('fNaam').value.trim();
+  const lat  = parseFloat(document.getElementById('fLat').value);
+  const lng  = parseFloat(document.getElementById('fLng').value);
+
+  if (!naam) { alert('Vul een naam in.'); return; }
+  if (isNaN(lat) || isNaN(lng)) { alert('Zoek eerst de locatie op via "Zoek locatie op kaart".'); return; }
+
+  const perceel = {
+    id: editingId || genId(),
+    naam,
+    adres: document.getElementById('fAdres').value.trim(),
+    lat, lng,
+    status: document.getElementById('fStatus').value,
+    beschrijving: document.getElementById('fBeschrijving').value.trim(),
+    foto: document.getElementById('fFoto').value.trim(),
+    aangemaakt: editingId ? undefined : new Date().toISOString()
+  };
+
+  if (editingId) {
+    const idx = percelen.findIndex(p => p.id === editingId);
+    if (idx !== -1) percelen[idx] = perceel;
+  } else {
+    percelen.push(perceel);
+  }
+
+  slaOp();
+  renderAlles();
+  closeForm();
+
+  setTimeout(() => {
+    if (markers[perceel.id]) {
+      map.setView([perceel.lat, perceel.lng], 15);
+      markers[perceel.id].openPopup();
+    }
+  }, 100);
+}
+
+function editPerceel(id) {
+  const p = percelen.find(x => x.id === id);
+  if (p) { map.closePopup(); openForm(p); }
+}
+
+function verwijderPerceel(id) {
+  if (!confirm('Perceel verwijderen?')) return;
+  percelen = percelen.filter(p => p.id !== id);
+  slaOp();
+  renderAlles();
+  map.closePopup();
+}
+
+function exportData() {
+  const blob = new Blob([JSON.stringify(percelen, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'voedsellint-percelen.json';
+  a.click();
+}
+
+renderAlles();
+</script>
+</body>
+</html>
